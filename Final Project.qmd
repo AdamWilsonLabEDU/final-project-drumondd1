@@ -1,0 +1,268 @@
+---
+title: "Final Project"
+author: "Drumond Dzakuma"
+editor: visual
+Date: November 20, 2024
+---
+
+```{r}
+# Install and load necessary packages
+install.packages(c("sf", "sp", "spdep", "ggplot2", "tmap", "leaflet", "tidyr"))
+
+library(sf)
+library(sp)
+library(spdep)
+library(ggplot2)
+library(tmap)
+library(leaflet)
+```
+
+# Load necessary library
+
+```{r}
+library(readr)
+
+# Load CSV data
+pqi_data <- read_csv("data/pqi.csv")
+sdi_data <- read_csv("data/sdi.csv")
+
+# Display the first few rows to confirm successful loading
+head(pqi_data)
+head(sdi_data)
+```
+
+```{r}
+str(pqi_data)
+str(sdi_data)
+```
+
+# Check columns for deletion
+
+```{r}
+# Check if any columns contain only the value 14
+cols_to_remove <- sapply(sdi_data, function(col) all(col == 14, na.rm = TRUE))
+cols_to_remove <- sapply(pqi_data, function(col) all(col == 14, na.rm = TRUE))
+
+# View the columns flagged for removal
+which(cols_to_remove)
+```
+
+```{r}
+str(sdi_data)
+head(pqi_data)
+```
+
+```{r}
+library(dplyr)
+sdi_data <- sdi_data %>%
+  rename(SDI_Overall = SDI_score,
+         SDI_Poverty = PovertyLT100_FPL_score,
+         SDI_lowEducation = Education_LT12years_score,
+         SDI_PovertyPercentage = pct_Poverty_LT100
+         )
+```
+
+```{r}
+library(dplyr)
+
+# No renaming needed since the columns already have the correct names
+sdi_data <- sdi_data %>%
+  rename(
+    ZCTA_Population = ZCTA5_population
+  )
+```
+
+```{r}
+str(sdi_data)
+head(pqi_data)
+names(sdi_data) 
+```
+
+# check row names for conistency
+
+```{r}
+# Check row names in both datasets
+colnames(pqi_data)
+colnames(sdi_data)
+```
+
+# Merge datasets
+
+```{r}
+# Merge the two datasets based on ZIP code
+merged_data <- left_join(pqi_data, sdi_data)
+```
+
+```{r}
+# Check the first few rows of the merged dataset
+head(merged_data)
+
+# Summary to ensure expected columns and no unexpected NAs
+summary(merged_data)
+```
+
+```{r}
+missing_sdi <- merged_data %>% filter(is.na(SDI_Overall))
+nrow(missing_sdi)
+```
+
+```{r}
+table(missing_sdi$Year)
+```
+
+# Backfill or Foward fill SDI Data
+
+```{r}
+filled_data <- merged_data %>%
+  group_by(`Patient Zipcode`) %>%
+  mutate(SDI_Overall = ifelse(is.na(SDI_Overall), 
+                              first(na.omit(SDI_Overall)), 
+                              SDI_Overall))
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+# Fill missing SDI_Overall within each Patient Zipcode group
+filled_data <- merged_data %>%
+  group_by(`Patient Zipcode`) %>%
+  arrange(Year) %>%  # Arrange by Year to ensure the 'first' non-missing value is the earliest
+  mutate(SDI_Overall = ifelse(is.na(SDI_Overall), 
+                               first(na.omit(SDI_Overall)), 
+                               SDI_Overall)) %>%
+  ungroup()  # Ungroup after the mutation
+```
+
+```{r}
+sum(is.na(filled_data$SDI_Overall))
+```
+
+```{r}
+head(filled_data %>% filter(is.na(SDI_Overall)))
+table(filled_data$Year, is.na(filled_data$SDI_Overall))
+```
+
+# inspect specific rows where remaining missing values exist
+
+```{r}
+filled_data %>% filter(is.na(SDI_Overall))
+```
+
+```{r}
+sum(is.na(merged_data$SDI_Overall))
+sum(is.na(filled_data$SDI_Overall))
+table(filled_data$Year, is.na(filled_data$SDI_Overall))
+```
+
+# Check missing values for 2009 and 2011
+
+```{r}
+# Check missing values in 2009 and 2011
+filled_data %>% filter(Year %in% c(2009, 2011) & is.na(SDI_Overall))
+```
+
+```{r}
+filled_data <- merged_data %>%
+  group_by(`Patient Zipcode`) %>%
+  mutate(SDI_Overall = ifelse(is.na(SDI_Overall), 
+                              median(na.omit(SDI_Overall)), 
+                              SDI_Overall)) %>%
+  ungroup()
+```
+
+```{r}
+# Check if there are any remaining missing values
+sum(is.na(filled_data$SDI_Overall))
+```
+
+```{r}
+# Fill missing SDI_Overall for specific zip code (e.g., 14083)
+filled_data <- filled_data %>% 
+  mutate(SDI_Overall = ifelse(is.na(SDI_Overall) & `Patient Zipcode` == 14083, 
+                              median(na.omit(SDI_Overall), na.rm = TRUE), 
+                              SDI_Overall))
+```
+
+```{r}
+# Inspect the rows for the specific zip code with filled values
+filled_data %>% filter(`Patient Zipcode` == 14083 & is.na(SDI_Overall))
+```
+
+```{r}
+sum(is.na(filled_data$SDI_Overall))
+# Check a small sample to ensure filling was done properly
+head(filled_data)
+```
+
+```{r}
+dim(filled_data)
+summary(filled_data$SDI_Overall)
+head(filled_data, 10)
+```
+
+```{r}
+sum(is.na(filled_data$SDI_Overall))
+```
+
+# Visualize Distribution of SD_Overall Scores Across Years
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+
+# Plot the distribution of SDI_Overall scores across years
+ggplot(filled_data, aes(x = SDI_Overall, fill = factor(Year))) +
+  geom_density(alpha = 0.6) +  # Density plot with transparency
+  labs(title = "Distribution of SDI_Overall Scores Across Years",
+       x = "SDI Overall",
+       y = "Density") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set3")  # Color palette for years
+```
+
+```{r}
+# Plot the yearly trend of SDI_Overall for each Patient Zipcode
+ggplot(filled_data, aes(x = Year, y = SDI_Overall, group = `Patient Zipcode`, color = factor(`Patient Zipcode`))) +
+  geom_line(alpha = 0.3) +  # Line plot with semi-transparency
+  labs(title = "Yearly Trends of SDI_Overall Across Zip Codes",
+       x = "Year",
+       y = "SDI Overall") +
+  theme_minimal() +
+  theme(legend.position = "none")  # Remove legend for better clarity
+```
+
+# Use a larger Color Pallette
+
+```{r}
+install.package("viridis")
+# Load the viridis package
+library(viridis)
+
+# Plot the distribution with the viridis color scale
+ggplot(filled_data, aes(x = SDI_Overall, fill = factor(Year))) +
+  geom_density(alpha = 0.6) +  # Density plot with transparency
+  labs(title = "Distribution of SDI_Overall Scores Across Years",
+       x = "SDI Overall",
+       y = "Density") +
+  theme_minimal() +
+  scale_fill_viridis(discrete = TRUE)  # Using viridis for a better color scale
+```
+
+# Descriptive Statistics: Summary statistics Across Years or Zip codes
+
+```{r}
+# Summary statistics for SDI_Overall by Year
+filled_data %>% 
+  group_by(Year) %>% 
+  summarise(
+    Min = min(SDI_Overall, na.rm = TRUE),
+    Q1 = quantile(SDI_Overall, 0.25, na.rm = TRUE),
+    Median = median(SDI_Overall, na.rm = TRUE),
+    Mean = mean(SDI_Overall, na.rm = TRUE),
+    Q3 = quantile(SDI_Overall, 0.75, na.rm = TRUE),
+    Max = max(SDI_Overall, na.rm = TRUE),
+    SD = sd(SDI_Overall, na.rm = TRUE)
+  )
+```
+
