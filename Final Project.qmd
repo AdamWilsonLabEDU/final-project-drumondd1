@@ -265,4 +265,3 @@ filled_data %>%
     SD = sd(SDI_Overall, na.rm = TRUE)
   )
 ```
-
