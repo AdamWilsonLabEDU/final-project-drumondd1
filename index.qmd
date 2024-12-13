@@ -1,10 +1,14 @@
+
 ---
 title: "Spatial Analysis of Hospital Inpatient PQI for Undiagnosed Diabetes in Erie County" 
-author: Drumond Dzakuma
-subtitle: Final_Project (GEO 511)
-date: November 20, 2024
-format: html
+author: "Drumond Dzakuma"
+subtitle: "Final_Project"
+date: "November 20, 2024"
+format:
+  gfm:
+    prefer-html: true
 ---
+
 
 # Introduction
 
