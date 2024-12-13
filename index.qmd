@@ -1,9 +1,9 @@
 ---
-title: "Spatial Analysis of Hospital Inpatient PQI for Undiagnosed Diabetes in Erie County."
+title: "Spatial Analysis of Hospital Inpatient PQI for Undiagnosed Diabetes in Erie County" 
 author: Drumond Dzakuma
-subtitle: Final Project
+subtitle: Final_Project (GEO 511)
 date: November 20, 2024
-date-format: long
+format: html
 ---
 
 # Introduction
@@ -27,21 +27,23 @@ BASIC FORMAT OF PROJECT
 Here's my first code chunk.
 
 # Load necessary files and read
-
 ```{r}
-library(sf)
-library(sp)
-library(spdep)
-library(ggplot2)
+# Data wrangling
 library(dplyr)
 library(tidyr)
+library(stringr)
+
+# Spatial analysis and mapping
+library(sf)
+library(spdep)
 library(tmap)
 library(leaflet)
-library(htmlwidgets) 
+
+# Plotting
+library(ggplot2)
 ```
 
 # Load necessary files and read
-
 ```{r}
 library(readr)
 
@@ -56,517 +58,565 @@ str(pqi_sdi_data)
 ```
 
 # Rename Columns in SDI Data to Ensure CLarity 
-
 ```{r}
 library(dplyr)
-# Rename columns in pqi_sdi data 
 
+# Rename columns in pqi_sdi data 
 pqi_sdi_data <- pqi_sdi_data %>%
   rename(
     SDI_Overall = SDI_score,
     SDI_Poverty = PovertyLT100_FPL_score,
   )
-```
+# Check the structure of the renamed dataset
+str(pqi_sdi_data)
 
-# Checking Shapefile Structure
-```{r}
-
-# Inspect shapefile structure and plot
-plot(erie.shp["geometry"])
+# Check the structure of the shapefile (erie.shp)
 str(erie.shp)
 ```
 
-# Checking miss values in each datatset column and Add Missingness flag
-
+# Converting ZCTA5CE20 in Shapefile to Numeric to Match pqi_sdi
 ```{r}
-# Count missing values in each column for PQI and SDI datasets
-colSums(is.na(pqi_sdi_data))
-
-# Add flags for missing values in SDI data
-
-sdi_data <- pqi_sdi_data %>%
-  mutate(
-    SDI_Overall_missing = ifelse(is.na(SDI_Overall), 1, 0),
-    SDI_Poverty_missing = ifelse(is.na(SDI_Poverty), 1, 0)
-  )
-
-# Summarize datasets
-summary(pqi_sdi_data)
-
-# Check shapefile structure
-str(erie.shp)
+# Convert ZCTA5CE20 to numeric in the shapefile
+erie.shp$ZCTA5CE20 <- as.numeric(erie.shp$ZCTA5CE20)
 ```
 
-# convert the ZCTA5CE20 column in pqi_sdi_data to a character
+# Merging the two data sets 
 
 ```{r}
-# Convert ZCTA5CE20 in pqi_sdi_data to character
-pqi_sdi_data <- pqi_sdi_data %>%
-  mutate(ZCTA5CE20 = as.character(ZCTA5CE20))
-
-# Join shapefile data with PQI and SDI data
-erie_data <- erie.shp %>%
+# Merge shapefile and CSV data on ZCTA5CE20
+erie_merged <- erie.shp %>%
   left_join(pqi_sdi_data, by = c("ZCTA5CE20" = "ZCTA5CE20"))
 
-# Check the structure of the joined data
-str(erie_data)
+# Check the structure of the merged dataset
+str(erie_merged)
 ```
 
 
-# Join data frame with shapefile and plot an example using tmap 
 ```{r}
-# Join shapefile data with PQI and SDI data
-erie_data <- erie.shp %>%
-  left_join(pqi_sdi_data, by = c("ZCTA5CE20" = "ZCTA5CE20"))
+# Identify intersecting ZCTAs
+intersecting_zctas <- intersect(erie.shp$ZCTA5CE20, pqi_sdi_data$ZCTA5CE20)
 
-# Check the structure of the joined data
-str(erie_data)
+# Filter shapefile and CSV to include only intersecting ZCTAs
+erie_filtered <- erie.shp %>% filter(ZCTA5CE20 %in% intersecting_zctas)
+pqi_sdi_filtered <- pqi_sdi_data %>% filter(ZCTA5CE20 %in% intersecting_zctas)
+
+# Check the number of rows after filtering
+nrow(erie_filtered)  # Number of rows in the filtered shapefile
+nrow(pqi_sdi_filtered)  # Number of rows in the filtered CSV
+
 ```
 
 
-# Fixing Invalid Polygons
+# Merging Filtered DAta 
 ```{r}
+# Merge the filtered datasets
+erie_merged_filtered <- merge(erie_filtered, pqi_sdi_filtered, by = "ZCTA5CE20")
+
+# Check the structure of the merged dataset
+str(erie_merged_filtered)
+```
+
+
+# Exploratory Data Analysis (EDA) and Statistical Summary
+
+```{r}
+# Calculate correlation between SDI and PQI values
+cor_pqi_sdi <- cor(pqi_sdi_filtered[, c("SDI_Poverty", "SDI_Overall", "PQI_03_Observed", "PQI_03_Expected", "PQI_14_Observed", "PQI_14_Expected")], use = "complete.obs")
+print(cor_pqi_sdi)
+```
+
+# Mapping PQI and SDI Scores
+```{r}
+library(ggplot2)
 library(sf)
 
-# Make polygons valid
-erie_data <- st_make_valid(erie_data)
+# Plot SDI (Overall) and PQI (Observed for PQI_03)
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = SDI_Overall)) +
+  scale_fill_viridis_c() + 
+  theme_minimal() +
+  labs(title = "Spatial Distribution of SDI (Overall) and PQI_03_Observed", 
+       fill = "SDI Overall") +
+  theme(legend.position = "bottom")
 
-# Plot using tmap
-map <- tm_shape(erie_data) +
-  tm_polygons("SDI_Overall", palette = "viridis", title = "SDI Overall") +
-  tm_layout(title = "SDI Overall Score by ZCTA in Erie County", legend.outside = TRUE)
-
-# Save the map
-tmap_save(map, "SDI_Overall_Score_Erie_County.png")
+# Overlay PQI_03_Observed on the same map
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = PQI_03_Observed)) +
+  scale_fill_viridis_c() + 
+  theme_minimal() +
+  labs(title = "Spatial Distribution of PQI_03_Observed", 
+       fill = "PQI 03 Observed") +
+  theme(legend.position = "bottom")
 ```
 
-# Spatial Autocorrelation Analysis
+# Map for PQI_14_Observed and PQI_14_Expected
+```{r}
+# Map for PQI_14_Observed
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = PQI_14_Observed)) +
+  scale_fill_viridis_c() + 
+  theme_minimal() +
+  labs(title = "Spatial Distribution of PQI_14_Observed", 
+       fill = "PQI 14 Observed") +
+  theme(legend.position = "bottom")
 
+# Map for PQI_14_Expected
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = PQI_14_Expected)) +
+  scale_fill_viridis_c() + 
+  theme_minimal() +
+  labs(title = "Spatial Distribution of PQI_14_Expected", 
+       fill = "PQI 14 Expected") +
+  theme(legend.position = "bottom")
+
+# Map for SDI_Poverty
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = SDI_Poverty)) +
+  scale_fill_viridis_c() + 
+  theme_minimal() +
+  labs(title = "Spatial Distribution of SDI (Poverty)", 
+       fill = "SDI Poverty") +
+  theme(legend.position = "bottom")
+
+# Map for SDI_Overall
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = SDI_Overall)) +
+  scale_fill_viridis_c() + 
+  theme_minimal() +
+  labs(title = "Spatial Distribution of SDI (Overall)", 
+       fill = "SDI Overall") +
+  theme(legend.position = "bottom")
+```
+
+
+```{r}
+# Plot SDI (Poverty) and PQI (Observed for PQI_14)
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = SDI_Poverty)) +
+  scale_fill_viridis_c() + 
+  theme_minimal() +
+  labs(title = "Spatial Distribution of SDI (Poverty) and PQI_14_Observed", 
+       fill = "SDI Poverty") +
+  theme(legend.position = "bottom")
+
+# Overlay PQI_14_Observed on the same map
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = PQI_14_Observed)) +
+  scale_fill_viridis_c() + 
+  theme_minimal() +
+  labs(title = "Spatial Distribution of PQI_14_Observed", 
+       fill = "PQI 14 Observed") +
+  theme(legend.position = "bottom")
+```
+
+
+```{r}
+# Plot SDI (Overall) and PQI (Expected for PQI_14)
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = SDI_Overall)) +
+  scale_fill_viridis_c() + 
+  theme_minimal() +
+  labs(title = "Spatial Distribution of SDI (Overall) and PQI_14_Expected", 
+       fill = "SDI Overall") +
+  theme(legend.position = "bottom")
+
+# Overlay PQI_14_Expected on the same map
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = PQI_14_Expected)) +
+  scale_fill_viridis_c() + 
+  theme_minimal() +
+  labs(title = "Spatial Distribution of PQI_14_Expected", 
+       fill = "PQI 14 Expected") +
+  theme(legend.position = "bottom")
+```
+
+
+```{r}
+# Plot SDI (Overall) and PQI (Expected for PQI_14) with explanations
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = SDI_Overall)) +
+  scale_fill_viridis_c(option = "magma", 
+                       name = "SDI Overall\nScore", 
+                       labels = scales::comma) +  # Adds comma to numbers for readability
+  theme_minimal() +
+  labs(
+    title = "Spatial Distribution of SDI (Overall) and PQI_14_Expected",
+    subtitle = "Mapping the Social Deprivation Index (Overall) against PQI_14 (Uncontrolled Diabetes) Expected",
+    caption = "Data source: Erie County Health Data",
+    fill = "SDI Overall"
+  ) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12, face = "italic"),
+    plot.caption = element_text(size = 8, hjust = 1)
+  ) +
+  geom_sf(aes(fill = PQI_14_Expected), alpha = 0.5) +  # Add PQI_14_Expected overlay
+  scale_fill_viridis_c(option = "viridis", 
+                       name = "PQI 14 Expected\nRate (%)", 
+                       labels = scales::percent) +
+  theme(legend.position = "bottom")
+```
+
+
+```{r}
+# Plot SDI (Poverty) and PQI (Observed for PQI_14) with explanations
+ggplot(erie_merged_filtered) +
+  geom_sf(aes(fill = SDI_Poverty)) +
+  scale_fill_viridis_c(option = "plasma", 
+                       name = "SDI Poverty\nScore", 
+                       labels = scales::comma) +  # Adds comma to numbers for better readability
+  theme_minimal() +
+  labs(
+    title = "Spatial Distribution of SDI (Poverty) and PQI_14_Observed",
+    subtitle = "Mapping the Social Deprivation Index (Poverty) against PQI_14 (Uncontrolled Diabetes) Observed",
+    caption = "Data source: Erie County Health Data",
+    fill = "SDI Poverty"
+  ) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12, face = "italic"),
+    plot.caption = element_text(size = 8, hjust = 1)
+  ) +
+  geom_sf(aes(fill = PQI_14_Observed), alpha = 0.5) +  # Add PQI_14_Observed overlay
+  scale_fill_viridis_c(option = "viridis", 
+                       name = "PQI 14 Observed\nRate (%)", 
+                       labels = scales::percent) +
+  theme(legend.position = "bottom")
+```
+
+
+Step 3: Spatial Analysis: Moran's I for Spatial Autocorrelation
+# Checking and Fixing Invalied Geometries 
+
+```{r}
+# Inspect the invalid geometry
+invalid_geometry <- erie_merged_filtered[15, ]
+print(invalid_geometry)
+
+# Fix the invalid geometry
+erie_merged_filtered[15, ] <- st_make_valid(invalid_geometry)
+```
+
+
+# Assessing the spatial relationship between SDI and PQIs
 ```{r}
 library(spdep)
 
-# Remove rows with missing values in SDI_Overall
-erie_data_clean <- erie_data %>%
-  filter(!is.na(SDI_Overall))
+# Increase the snap argument to connect close polygons
+nb <- poly2nb(erie_merged_filtered, snap = 0.01)  # Adjust the snap value as needed
 
-# Create a spatial weights matrix
-coords <- st_coordinates(st_centroid(erie_data_clean))
-nb <- knn2nb(knearneigh(coords, k = 4))
-lw <- nb2listw(nb, style = "W")
+# Check for isolated units
+isolated_units <- which(card(nb) == 0)
+print(isolated_units)
 
-# Calculate Moran's I
-moran_test <- moran.test(erie_data_clean$SDI_Overall, lw)
-print(moran_test)
+# Handle isolated units by setting zero.policy to TRUE
+lw <- nb2listw(nb, style = "W", zero.policy = TRUE)
+
+# Calculate Moran's I for PQI_03_Observed and SDI_Overall with zero.policy = TRUE
+moran_pqi_sdi <- moran.test(erie_merged_filtered$PQI_03_Observed, lw, zero.policy = TRUE)
+print(moran_pqi_sdi)
+
+# Calculate Moran's I for SDI_Overall with zero.policy = TRUE
+moran_sdi <- moran.test(erie_merged_filtered$SDI_Overall, lw, zero.policy = TRUE)
+print(moran_sdi)
+
+# Calculate Moran's I for PQI_14_Observed
+moran_pqi_14_observed <- moran.test(erie_merged_filtered$PQI_14_Observed, lw, zero.policy = TRUE)
+print(moran_pqi_14_observed)
+
+# Calculate Moran's I for PQI_14_Expected
+moran_pqi_14_expected <- moran.test(erie_merged_filtered$PQI_14_Expected, lw, zero.policy = TRUE)
+print(moran_pqi_14_expected)
 ```
 
-# Visualizing Spatial Autocorrelation
+# Local Moran's I (LISA)
+Local Moran's I can help identify specific areas with significant spatial autocorrelation.
 ```{r}
-# Create a spatial weights matrix
-coords <- st_coordinates(st_centroid(erie_data_clean))
-nb <- knn2nb(knearneigh(coords, k = 4))
-lw <- nb2listw(nb, style = "W")
+# Calculate Local Moran's I for PQI_14_Observed
+local_moran_pqi_14_observed <- localmoran(erie_merged_filtered$PQI_14_Observed, lw, zero.policy = TRUE)
+erie_merged_filtered$local_moran_pqi_14_observed <- local_moran_pqi_14_observed[,1]
 
-# Calculate Getis-Ord Gi* statistic
-gi_star <- localG(erie_data_clean$SDI_Overall, lw)
+# Calculate Local Moran's I for PQI_14_Expected
+local_moran_pqi_14_expected <- localmoran(erie_merged_filtered$PQI_14_Expected, lw, zero.policy = TRUE)
+erie_merged_filtered$local_moran_pqi_14_expected <- local_moran_pqi_14_expected[,1]
 
-# Add Gi* results to the data
-erie_data_clean$Gi_star <- as.numeric(gi_star)
-```
-
-# Hotspot Analysis of PQI Observations Using Getis-Ord Gi"
-```{r}
-
-# Create a spatial weights matrix
-coords <- st_coordinates(st_centroid(erie_data_clean))
-nb <- knn2nb(knearneigh(coords, k = 4))
-lw <- nb2listw(nb, style = "W")
-
-# Calculate Getis-Ord Gi* statistic
-gi_star <- localG(erie_data_clean$PQI_14_Observed, lw)
-
-# Add Gi* results to the data
-erie_data_clean$Gi_star <- as.numeric(gi_star)
-
-# Plotting the hotspot analysis results using tmap
-tm_shape(erie_data_clean) +
-  tm_polygons("Gi_star", palette = "RdYlBu", title = "Getis-Ord Gi*") +
-  tm_layout(title = "Hotspot Analysis of pqi_14_observed", legend.outside = TRUE)
-```
-```{r}
-# Create a spatial weights matrix
-coords <- st_coordinates(st_centroid(erie_data_clean))
-nb <- knn2nb(knearneigh(coords, k = 4))
-lw <- nb2listw(nb, style = "W")
-
-# Calculate Getis-Ord Gi* statistic
-gi_star <- localG(erie_data_clean$PQI_14_Observed, lw)
-
-# Add Gi* results to the data
-erie_data_clean$Gi_star <- as.numeric(gi_star)
-
-# Plotting the hotspot analysis results using tmap
-map <- tm_shape(erie_data_clean) +
-  tm_polygons("Gi_star", palette = "RdYlBu", title = "Getis-Ord Gi*") +
-  tm_layout(title = "Hotspot Analysis of PQI_14_Observed", legend.outside = TRUE)
-
-# Save the map
-tmap_save(map, "hotspot_analysis_map.png")
+# Print summary of Local Moran's I results
+summary(local_moran_pqi_14_observed)
+summary(local_moran_pqi_14_expected)
 ```
 
 
-# Plotting and Saving interative map 
+# Spatial Regression
+We can perform spatial regression to understand the relationship between SDI and PQIs while accounting for spatial dependence.
 ```{r}
+library(spData)
+library(spatialreg)
+
+# Run the spatial lag model for PQI_14_Observed
+lag_model_pqi_14_observed <- lagsarlm(PQI_14_Observed ~ SDI_Overall + SDI_Poverty, 
+                                      data = erie_merged_filtered, 
+                                      listw = lw, 
+                                      zero.policy = TRUE)
+summary(lag_model_pqi_14_observed)
+
+# Run the spatial lag model for PQI_14_Expected
+lag_model_pqi_14_expected <- lagsarlm(PQI_14_Expected ~ SDI_Overall + SDI_Poverty, 
+                                      data = erie_merged_filtered, 
+                                      listw = lw, 
+                                      zero.policy = TRUE)
+summary(lag_model_pqi_14_expected)
+```
+
+
+# Visualization of LISA Results
+We can map the local Moran's I results to visualize clusters and outliers.
+```{r}
+# Map for Local Moran's I for PQI_14_Observed
+tm_shape(erie_merged_filtered) +
+  tm_polygons("local_moran_pqi_14_observed", palette = "RdYlBu", title = "Local Moran's I for PQI_14_Observed") +
+  tm_layout(title = "Local Moran's I for PQI_14_Observed", legend.outside = TRUE)
+
+# Map for Local Moran's I for PQI_14_Expected
+tm_shape(erie_merged_filtered) +
+  tm_polygons("local_moran_pqi_14_expected", palette = "RdYlBu", title = "Local Moran's I for PQI_14_Expected") +
+  tm_layout(title = "Local Moran's I for PQI_14_Expected", legend.outside = TRUE)
+```
+
+
+```{R}
+# Fit OLS model
+ols_model <- lm(PQI_14_Observed ~ SDI_Overall, data = erie_merged_filtered)
+
+# Summary of the OLS model
+summary(ols_model)
+
+# Check for spatial autocorrelation in residuals
+ols_residuals <- residuals(ols_model)
+moran_ols <- moran.test(ols_residuals, lw, zero.policy = TRUE)
+print(moran_ols)
+```
+
+
+```{r}
+# Fit OLS model for PQI_14_Expected
+ols_model_expected <- lm(PQI_14_Expected ~ SDI_Overall, data = erie_merged_filtered)
+
+# Summary of the OLS model
+summary_ols_expected <- summary(ols_model_expected)
+print(summary_ols_expected)
+
+# Extract residuals
+ols_residuals_expected <- residuals(ols_model_expected)
+
+# Moran's I test on residuals
+moran_ols_expected <- moran.test(ols_residuals_expected, lw, zero.policy = TRUE)
+print(moran_ols_expected)
+```
+
+
+```{r}
+# Fit OLS model for PQI_14_Expected ~ SDI_Poverty
+ols_model_poverty <- lm(PQI_14_Expected ~ SDI_Poverty, data = erie_merged_filtered)
+
+# Summary of the OLS model
+summary_ols_poverty <- summary(ols_model_poverty)
+print(summary_ols_poverty)
+
+# Extract residuals
+ols_residuals_poverty <- residuals(ols_model_poverty)
+
+# Moran's I test on residuals
+moran_ols_poverty <- moran.test(ols_residuals_poverty, lw, zero.policy = TRUE)
+print(moran_ols_poverty)
+```
+
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(sf)
 library(leaflet)
-library(mapview)
 
-# Create an interactive map
-interactive_map <- leaflet(data = erie_data) %>%
+# Assuming erie_merged_filtered is already created and contains the necessary data
+
+# Create a color palette for PQI_14_Observed
+pal_observed <- colorNumeric(palette = "viridis", domain = erie_merged_filtered$PQI_14_Observed)
+
+# Create a color palette for PQI_14_Expected
+pal_expected <- colorNumeric(palette = "viridis", domain = erie_merged_filtered$PQI_14_Expected)
+
+# Create the leaflet map for PQI_14_Observed
+map_observed <- leaflet(erie_merged_filtered) %>%
   addTiles() %>%
-  addPolygons(fillColor = ~colorNumeric("viridis", SDI_Overall)(SDI_Overall),
-              color = "#BDBDC3", weight = 1, opacity = 1, fillOpacity = 0.9,
-              highlightOptions = highlightOptions(color = "red", weight = 2,
-                                                  bringToFront = TRUE),
-              label = ~paste("ZCTA:", ZCTA5CE20, "<br>", "SDI Overall:", SDI_Overall)) %>%
-  addLegend(pal = colorNumeric("viridis", erie_data$SDI_Overall), values = ~SDI_Overall,
-            title = "SDI Overall Score",
-            position = "bottomright")
+  addPolygons(
+    fillColor = ~pal_observed(PQI_14_Observed),
+    color = "black",
+    weight = 1,
+    opacity = 1,
+    fillOpacity = 0.7,
+    highlight = highlightOptions(
+      weight = 3,
+      color = "#666",
+      fillOpacity = 0.7,
+      bringToFront = TRUE
+    ),
+    label = ~paste("ZCTA:", ZCTA5CE20, "<br>", "PQI_14_Observed:", PQI_14_Observed)
+  ) %>%
+  addLegend(
+    pal = pal_observed,
+    values = ~PQI_14_Observed,
+    opacity = 0.7,
+    title = "PQI_14_Observed",
+    position = "bottomright"
+  )
 
-# Save the interactive map as an HTML file
-saveWidget(interactive_map, "interactive_hotspot_analysis_map.html")
-```
-
-
-```{r}
-# Plotting the hotspot analysis results for PQI_14_Observed
-tm_shape(erie_data_clean) +
-  tm_polygons("PQI_14_Observed", palette = "RdYlBu", title = "Getis-Ord Gi* for PQI 14 Observed") +
-  tm_layout(title = "Hotspot Analysis of PQI 14 Observed", legend.outside = TRUE)
-
-# Plotting the hotspot analysis results for PQI_41_Expected
-tm_shape(erie_data_clean) +
-  tm_polygons("PQI_14_Expected", palette = "viridis", title = "Getis-Ord Gi* for PQI 14 Expected") +
-  tm_layout(title = "Hotspot Analysis of PQI 14 Expected", legend.outside = TRUE)
-
-# Function to save tmap plots
-save_tmap_plot <- function(column, palette, title, filename) {
-  map <- tm_shape(erie_data_clean) +
-    tm_polygons(column, palette = palette, title = title) +
-    tm_layout(title = title, legend.outside = TRUE)
-  tmap_save(map, filename)
-}
-
-# Save hotspot analysis results as images
-save_tmap_plot("PQI_14_Observed", "RdYlBu", "Getis-Ord Gi* for PQI 14 Observed", "PQI_14_Observed_Hotspot.png")
-save_tmap_plot("PQI_14_Expected", "viridis", "Getis-Ord Gi* for PQI 14 Expected", "PQI_14_Expected_Hotspot.png")
-```
-
-
-# Hotspot Analysis of Diabetes-related PQI Indicators using Getis-Ord Gi Statistic
-```{r}
-# Run Getis-Ord Gi* statistic for a given column
-run_hotspot_analysis <- function(column) {
-  gi_star <- localG(erie_data_clean[[column]], lw)
-  erie_data_clean[[paste0("Gi_star_", column)]] <- as.numeric(gi_star)
-}
-
-# Run hotspot analysis for each relevant column
-columns_to_analyze <- c(
-  "PQI_03_Observed", "PQI_03_Expected"
-)
-
-for (column in columns_to_analyze) {
-  run_hotspot_analysis(column)
-}
-
-# Plotting the hotspot analysis results using tmap for one of the columns
-tm_shape(erie_data_clean) +
-  tm_polygons("PQI_03_Observed", palette = "RdYlBu", title = "Getis-Ord Gi* for PQI 03 Observed") +
-  tm_layout(title = "Hotspot Analysis of PQI 03 Observed", legend.outside = TRUE) 
-
-tm_shape(erie_data_clean) +
-  tm_polygons("PQI_03_Expected", palette = "RdYlBu", title = "Getis-Ord Gi* for PQI 03 Expected") +
-  tm_layout(title = "Hotspot Analysis of PQI 03 Expected", legend.outside = TRUE)
-```
-
-
-
-# Defining Custom Colors 
-```{r}
-# Define custom color palette
-vble <- c("green", "blue", "red") # Example of a custom palette
-
-# Create the map
-map <- tm_shape(erie_data_clean) +
-  tm_polygons("PQI_14_Expected", palette = vble, title = "Getis-Ord Gi* for PQI 14 Expected") +
-  tm_layout(title = "Hotspot Analysis of PQI 14 Expected", legend.outside = TRUE)
-
-# Save the map as an image file
-tmap_save(map, "PQI_14_Expected_Hotspot.png")
-```
-
-
-# Hotspot Analysis of Undiagnosed Diabetes (PQI 14) using Getis-Ord Gi Statistic
-```{r}
-# Transform the spatial data to WGS84
-erie_data <- st_transform(erie_data, crs = 4326)
-
-# Function to run Getis-Ord Gi* statistic for a given column
-run_hotspot_analysis <- function(column) {
-  gi_star <- localG(erie_data_clean[[column]], lw)
-  erie_data_clean[[paste0("Gi_star_", column)]] <- as.numeric(gi_star)
-}
-
-# Run hotspot analysis for each relevant column
-columns_to_analyze <- c(
-  "PQI_14_Observed", "PQI_14_Expected"
-)
-
-# Plotting the hotspot analysis results using tmap for one of the columns
-tm_shape(erie_data_clean) +
-  tm_polygons("PQI_14_Observed", palette = "viridis", title = "Getis-Ord Gi* for PQI 14 Observed") +
-  tm_layout(title = "Hotspot Analysis of PQI 14 Observed", legend.outside = TRUE) 
-
-tm_shape(erie_data_clean) +
-  tm_polygons("PQI_14_Expected", palette = "magma", title = "Getis-Ord Gi* for PQI 14 Expected") +
-  tm_layout(title = "Hotspot Analysis of PQI 14 Expected", legend.outside = TRUE)
-```
-
-
-# Creating Interactive Maps with Leaflet
-```{r}
-# Transform the spatial data to WGS84
-erie_data <- st_transform(erie_data, crs = 4326)
-
-# Create an interactive map for PQI_01_Observed
-map_observed <- leaflet(erie_data_clean) %>%
+# Create the leaflet map for PQI_14_Expected
+map_expected <- leaflet(erie_merged_filtered) %>%
   addTiles() %>%
-  addPolygons(fillColor = ~colorNumeric("viridis", PQI_14_Observed)(PQI_14_Observed),
-              color = "#BDBDC3", weight = 1, opacity = 1, fillOpacity = 0.9,
-              highlightOptions = highlightOptions(color = "yellow", weight = 2,
-                                                  bringToFront = TRUE),
-              label = ~paste("ZCTA:", ZCTA5CE20, "<br>", "PQI 01 Observed:", PQI_01_Observed)) %>%
-  addLegend(pal = colorNumeric("Blues", erie_data_clean$PQI_01_Observed), values = ~PQI_01_Observed,
-            title = "PQI 14 Observed",
-            position = "bottomleft")
+  addPolygons(
+    fillColor = ~pal_expected(PQI_14_Expected),
+    color = "black",
+    weight = 1,
+    opacity = 1,
+    fillOpacity = 0.7,
+    highlight = highlightOptions(
+      weight = 3,
+      color = "#666",
+      fillOpacity = 0.7,
+      bringToFront = TRUE
+    ),
+    label = ~paste("ZCTA:", ZCTA5CE20, "<br>", "PQI_14_Expected:", PQI_14_Expected)
+  ) %>%
+  addLegend(
+    pal = pal_expected,
+    values = ~PQI_14_Expected,
+    opacity = 0.7,
+    title = "PQI_14_Expected",
+    position = "bottomright"
+  )
 
-# Create an interactive map for PQI_01_Expected
-map_expected <- leaflet(erie_data_clean) %>%
-  addTiles() %>%
-  addPolygons(fillColor = ~colorNumeric("Spectral", PQI_14_Expected)(PQI_14_Expected),
-              color = "#BDBDC3", weight = 1, opacity = 1, fillOpacity = 0.9,
-              highlightOptions = highlightOptions(color = "yellow", weight = 2,
-                                                  bringToFront = TRUE),
-              label = ~paste("ZCTA:", ZCTA5CE20, "<br>", "PQI 14 Expected:", PQI_14_Expected)) %>%
-  addLegend(pal = colorNumeric("Greens", erie_data_clean$PQI_01_Expected), values = ~PQI_01_Expected,
-            title = "PQI 14 Expected",
-            position = "bottomleft")
-
-# Display the maps
+# Display maps
 map_observed
 map_expected
 ```
 
 
 ```{r}
-# Create a spatial weights matrix
-coords <- st_coordinates(st_centroid(erie_data_clean))
-nb <- knn2nb(knearneigh(coords, k = 4))
-lw <- nb2listw(nb, style = "W")
-
-# Calculate Moran's I for PQI relative to SDI score
-moran_pqi_sdi <- moran.test(erie_data_clean$PQI_01_Observed, lw)
-
-# Print the results
-print(moran_pqi_sdi)
-
-# Create a spatial weights matrix
-coords <- st_coordinates(st_centroid(erie_data_clean))
-nb <- knn2nb(knearneigh(coords, k = 4))
-lw <- nb2listw(nb, style = "W")
-
-# Calculate Moran's I for PQI relative to SDI score
-moran_pqi_sdi <- moran.test(erie_data_clean$PQI_14_Observed, lw)
-
-# Calculate Moran's I for PQI relative to SDI score
-moran_pqi_sdi <- moran.test(erie_data_clean$PQI_14_Expected, lw)
-
-# Print the results
-print(moran_pqi_sdi)
-```
-
-# Mapping Hotspots Using Getis-Ord Gi*
-```{r}
-library(spdep)
 library(tmap)
 
-# Compute Gi* statistics for PQI_01_Observed
-erie_data_clean$Gi_star_PQI_01 <- as.numeric(localG(erie_data_clean$PQI_01_Observed, lw))
+# Switch to interactive mode for Leaflet integration
+tmap_mode("view")
 
-# Compute Gi* statistics for PQI_14_Expected
-erie_data_clean$Gi_star_PQI_14 <- as.numeric(localG(erie_data_clean$PQI_14_Expected, lw))
+# PQI 03 Observed
+map1 <- tm_shape(erie_merged_filtered) +
+  tm_polygons("PQI_03_Observed", palette = "viridis", title = "PQI 03 Observed") +
+  tm_layout(main.title = "PQI 03 Observed in Erie County", legend.outside = TRUE)
 
-# Map hotspots for PQI_01_Observed
-tm1 <- tm_shape(erie_data_clean) +
-  tm_polygons("Gi_star_PQI_01", 
-              title = "Hotspots (Gi*) for PQI 01 Observed",
-              palette = "RdYlBu", 
-              style = "quantile") +
-  tm_layout(legend.outside = TRUE)
+# PQI 03 Expected
+map2 <- tm_shape(erie_merged_filtered) +
+  tm_polygons("PQI_03_Expected", palette = "viridis", title = "PQI 03 Expected") +
+  tm_layout(main.title = "PQI 03 Expected in Erie County", legend.outside = TRUE)
 
-# Map hotspots for PQI_14_Expected
-tm2 <- tm_shape(erie_data_clean) +
-  tm_polygons("Gi_star_PQI_14", 
-              title = "Hotspots (Gi*) for PQI 14 Expected",
-              palette = "RdYlBu", 
-              style = "quantile") +
-  tm_layout(legend.outside = TRUE)
+# PQI 14 Observed
+map3 <- tm_shape(erie_merged_filtered) +
+  tm_polygons("PQI_14_Observed", palette = "viridis", title = "PQI 14 Observed") +
+  tm_layout(main.title = "PQI 14 Observed in Erie County", legend.outside = TRUE)
 
-# Save the maps as images
-tmap_save(tm1, "Hotspots_PQI_01_Observed.png", dpi = 300)
-tmap_save(tm2, "Hotspots_PQI_14_Expected.png", dpi = 300)
-```
+# PQI 14 Expected
+map4 <- tm_shape(erie_merged_filtered) +
+  tm_polygons("PQI_14_Expected", palette = "viridis", title = "PQI 14 Expected") +
+  tm_layout(main.title = "PQI 14 Expected in Erie County", legend.outside = TRUE)
 
-# Comparing Different PQI Measures
+# Render the maps
+map1
+map2
+map3
+map4
 
-```{r}
-# List of PQI measures to analyze
-pqi_measures <- c("PQI_14_Observed", "PQI_14_Expected", "PQI_03_Observed", "PQI_03_Expected")
-
-# Calculate Moran's I for each PQI measure relative to SDI score
-moran_results <- lapply(pqi_measures, function(measure) {
-  moran.test(erie_data_clean[[measure]], lw)
-})
-
-# Print Moran's I results for different PQI measures
-for (i in seq_along(pqi_measures)) {
-  cat("Moran's I for", pqi_measures[i], ":", moran_results[[i]]$estimate["Moran I statistic"], 
-      ", p-value:", moran_results[[i]]$p.value, "\n")
-}
+# Optional: Save maps as HTML files
+tmap_save(map1, "PQI_03_Observed.html")
+tmap_save(map2, "PQI_03_Expected.html")
+tmap_save(map3, "PQI_14_Observed.html")
+tmap_save(map4, "PQI_14_Expected.html")
 ```
 
 
 ```{r}
-library(ggplot2)
-library(spdep)
-
-# Calculate spatial lag
-erie_data_clean$lagged_PQI_14_Expected <- lag.listw(lw, erie_data_clean$PQI_14_Expected)
-
-# Create Moran's I scatter plot
-plot <- ggplot(erie_data_clean, aes(x = PQI_14_Expected, y = lagged_PQI_14_Expected)) +
-  geom_point() +
-  geom_smooth(method = "lm", se = FALSE, color = "blue") +
-  labs(x = "Expected Values", y = "Spatial Lag of Expected Values", title = "Moran's I Scatter Plot for PQI 14 Expected") +
-  theme_minimal()
-
-# Save the plot
-ggsave("Moran_I_Scatter_Plot_PQI_14_Expected.png", plot, dpi = 300)
-```
-
-
-
-```{r}
+library(tmap)
 library(leaflet)
-library(sf)
 
-# Transform the spatial data to WGS84
-erie_data_clean <- st_transform(erie_data_clean, crs = 4326)
+# Enable interactive viewing
+tmap_mode("view")
 
-# Interactive map comparing PQI observed and expected
-leaflet(data = erie_data_clean) %>%
-  addTiles() %>%
-  addPolygons(fillColor = ~colorNumeric("viridis", PQI_14_Observed)(PQI_14_Observed),
-              color = "#BDBDC3", weight = 1, fillOpacity = 0.8,
-              label = ~paste("PQI Observed:", PQI_14_Observed)) %>%
-  addPolygons(fillColor = ~colorNumeric("magma", PQI_14_Expected)(PQI_14_Expected),
-              color = "#BDBDC3", weight = 1, fillOpacity = 0.8,
-              label = ~paste("PQI Expected:", PQI_14_Expected)) %>%
-  addLegend(pal = colorNumeric("viridis", erie_data_clean$PQI_14_Observed),
-            values = ~PQI_14_Observed, title = "PQI Observed", position = "bottomleft") %>%
-  addLegend(pal = colorNumeric("magma", erie_data_clean$PQI_14_Expected),
-            values = ~PQI_14_Expected, title = "PQI Expected", position = "bottomright")
-ggsave("scatter_plot.png", dpi = 300)
+# PQI 14 Observed
+tm_shape(erie_merged_filtered) +
+  tm_polygons("PQI_14_Observed", palette = "viridis", title = "PQI 14 Observed") +
+  tm_layout(main.title = "PQI 14 Observed in Erie County", legend.outside = TRUE)
+
+# PQI 14 Expected
+tm_shape(erie_merged_filtered) +
+  tm_polygons("PQI_14_Expected", palette = "viridis", title = "PQI 14 Expected") +
+  tm_layout(main.title = "PQI 14 Expected in Erie County", legend.outside = TRUE)
 ```
+
+# Calculating the difference
+```{r}
+# Set tmap to interactive mode
+tmap_mode("view")
+
+# Calculate the differences
+erie_merged_filtered$PQI_14_Difference <- erie_merged_filtered$PQI_14_Observed - erie_merged_filtered$PQI_14_Expected
+
+# Create the map for the difference
+tm_shape(erie_merged_filtered) +
+  tm_polygons("PQI_14_Difference", 
+              palette = "viridis", 
+              title = "Difference (Observed - Expected)", 
+              midpoint = 0) +
+  tm_layout(main.title = "Difference Between Observed and Expected PQI 14", 
+            legend.outside = TRUE)
+```
+
+Analysis conducted on the spatial distribution of Prevention Quality Indicators (PQI and the Social Deprivation Index (SDI), has provided insights into the spatial patterns and relationships between these variables in Erie County. The SDI scores were visualized using tmap, which provides a clear spatial representation of deprivation levels across the county. This has helped in identifying areas in the county with high or low levels of social deprivation, which may correlate with health outcomes. Spatial Autocorrelation (Moran’ I): Moran’ I test for spatial autocorrelation revealed whether there is statistically significant clustering of SDI values across the study area. Being statistically significant or not suggest areas with high or low deprivation tend to cluster, which could have implications for policy. 
 
 
 # Results
 
-\[\~200 words\]
-
-Tables and figures (maps and other graphics) are carefully planned to convey the results of your analysis. Intense exploration and evidence of many trials and failures. The author looked at the data in many different ways before coming to the final presentation of the data.
-
-Show tables, plots, etc. and describe them.
-
-```{r, fig.width=6, fig.height=3, fig.cap="Map of completely random data"}
-m <- leaflet(data) %>% 
-  addTiles() %>% 
-  addCircleMarkers(~x, ~y, radius = ~size,color = ~as.factor(category)) %>% 
-  addPopups(~x[2], ~y[2], "Random popup")
-m  # a map with the default OSM tile layer
-```
-
-```{r}
-data %>% 
-  ggplot(aes(x=x,y=y,col=category))+
-  geom_point()
-```
-
-### Dygraphs Example
-
-```{r}
-library(dygraphs)
-dygraph(nhtemp, main = "New Haven Temperatures") |> 
-  dyRangeSelector(dateWindow = c("1920-01-01", "1960-01-01")) 
-```
+Significant correlations have been observed between social Deprivation Index (SDI) variables and Prevention Quality Indicators (PQI). Strong correlations have been noted especially between SDI_Poverty and PQI_14_Observed, suggesting that higher poverty levels are associated with increased rates of uncontrolled diabetes. The spatial maps produced reveal distinct patterns of SDI and PQIs across Zip codes in Erie County. Areas with higher SDI scores, especially SDI_Poverty, aligned with higher PQI_14 values. This underscores the influence of socioeconomic deprivation on health outcomes. Morn’s I statistics demonstrate significant global spatial autocorrelation for SDI_overall and PQI indicators. PQI_14_Observed and SDI_Overall exhibit clustering, to indicate geographic concentration of uncontrolled diabetes rates in socially deprived zip codes. Local spatial autocorrelation (LISA) analysis identified specific clusters of high SDI and PQI values. High-high clusters can be observed for SDI and PQI values to be concentrated in urbanized areas of Erie County with pronounced socioeconomic disadvantages. Spatial lag models confirmed a significant relationship between SDI components and PQI_14 outcomes. These models account for spatial dependencies and demonstrate that spatial deprivation, especially poverty, is a strong predictor of uncontrolled diabetes rates. The interactive maps created using leaflet allowed for a user-friendly exploration of the spatial distribution of SDI and PQI scores. 
 
 # Conclusions
 
-\[\~200 words\]
-
-Clear summary adequately describing the results and putting them in context. Discussion of further questions and ways to continue investigation.
+The analysis highlights the critical role of social determinants in shaping health outcomes, especially in high socioeconomic deprivation. Observed spatial clustering suggests that targeted interventions in high-risk areas could significantly reduce health disparities. The identification of hotspots where these factors co-occur suggest areas where targeted interventions could be most impactful. The interactive maps and visualizations provide a useful tool for conveying complex spatial relationships, to facilitate data-driven decision-making for health equity and resource allocation. Future work could involve refining these analyses, testing other spatial models, or incorporating additional covaries to explore more detailed patterns. These findings emphasize the importance of spatially informed health planning in addressing chronic disease burdens.   
 
 # References
 
-All sources are cited in a consistent manner
+Abate, T. W., Genanew, A., Gedamu, H., Tegenaw, A., Ayalew, E., Berhie, A. Y., Ergetie, T., & Shibesh, B. F. (2024). Unmasking the silent epidemic: a comprehensive systematic review and meta-analysis of undiagnosed diabetes in Ethiopian adults. Frontiers in Endocrinology, 15, 1372046.
 
-Add any additional processing steps here.
+CDC, C. f. D. C. a. P. (2022). National Diabetes Statistics Report. U. S. D. o. H. a. H. Services.
+https://www.cdc.gov/diabetes Cichosz, S. L., Bender, C., & Hejlesen, O. (2024). A Comparative Analysis of Machine Learning Models for the Detection of Undiagnosed Diabetes Patients. Diabetology, 5(1), 1-11.
 
-# Results
+Danaei, G., Friedman, A. B., Oza, S., Murray, C. J., & Ezzati, M. (2009). Diabetes prevalence and diagnosis in US states: analysis of health surveys. Population health metrics, 7, 1-13.
 
-\[\~200 words\]
+Dwyer-Lindgren, L., Mackenbach, J. P., Van Lenthe, F. J., Flaxman, A. D., & Mokdad, A. H. (2016).
+Diagnosed and undiagnosed diabetes prevalence by county in the US, 1999–2012. Diabetes care, 39(9),
+1556-1562.
 
-Tables and figures (maps and other graphics) are carefully planned to convey the results of your analysis. Intense exploration and evidence of many trials and failures. The author looked at the data in many different ways before coming to the final presentation of the data.
+Fang, M., Wang, D., Coresh, J., & Selvin, E. (2022). Undiagnosed diabetes in US adults: prevalence and trends. Diabetes care, 45(9), 1994-2002.
 
-Show tables, plots, etc. and describe them.
+Lee, D. C., Reddy, H., Koziatek, C. A., Klein, N., Chitnis, A., Creary, K., Francois, G., Akindutire, O., Femia, R., & Caldwell, R. (2023). Expanding Diabetes Screening to Identify Undiagnosed Cases Among Emergency Department Patients. Western Journal of Emergency Medicine, 24(5), 962.
 
-```{r, fig.width=6, fig.height=3, fig.cap="Map of completely random data"}
-m <- leaflet(data) %>% 
-  addTiles() %>% 
-  addCircleMarkers(~x, ~y, radius = ~size,color = ~as.factor(category)) %>% 
-  addPopups(~x[2], ~y[2], "Random popup")
-m  # a map with the default OSM tile layer
-```
+Menke, A., Casagrande, S., Geiss, L., & Cowie, C. C. (2015). Prevalence of and trends in diabetes among adults in the United States, 1988-2012. Jama, 314(10), 1021-1029.
 
-```{r}
-data %>% 
-  ggplot(aes(x=x,y=y,col=category))+
-  geom_point()
-```
+Moonesinghe, R., Beckles, G. L., Liu, T., & Khoury, M. J. (2018). The contribution of family history to the burden of diagnosed diabetes, undiagnosed diabetes, and prediabetes in the United States: analysis of the National Health and Nutrition Examination Survey, 2009–2014. Genetics In Medicine, 20(10), 1159-1166.
 
-### Dygraphs Example
+Selvin, E., Wang, D., Lee, A. K., Bergenstal, R. M., & Coresh, J. (2017). Identifying trends in undiagnosed diabetes in US adults by using a confirmatory definition: a cross-sectional study. Annals of internal medicine, 167(11), 769-776.
 
-```{r}
-library(dygraphs)
-dygraph(nhtemp, main = "New Haven Temperatures") |> 
-  dyRangeSelector(dateWindow = c("1920-01-01", "1960-01-01")) 
-```
+Walker, R. J., Williams, J. S., Linde, S., & Egede, L. E. (2024). Social risk and clinical outcomes among adults with type 2 diabetes. JAMA Network Open, 7(8), e2425996-e2425996.
 
-# Conclusions
+Xia, P.-F., Pan, X.-F., Li, Y., Guo, K., Yang, K., Tu, Z.-Z., Zhang, Y.-B., Geng, T.-T., Liu, G., & Pan, A. (2021). Trends in diagnosed and undiagnosed diabetes among adults in the US, 2005–2016. Diabetes care, 44(9), e175-e177.
 
-\[\~200 words\]
+Zhang, K., Liu, X., Xu, J., Yuan, J., Cai, W., Chen, T., Wang, K., Gao, Y., Nie, S., & Xu, X. (2021). Deeplearning models for the detection and incidence prediction of chronic kidney disease and type 2 diabetes from retinal fundus images. Nature biomedical engineering, 5(6), 533-545.
 
-Clear summary adequately describing the results and putting them in context. Discussion of further questions and ways to continue investigation.
 
-# References
-
-All sources are cited in a consistent manner
