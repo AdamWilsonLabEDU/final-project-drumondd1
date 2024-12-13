@@ -15,31 +15,16 @@ Undiagnosed (Uncontrolled) diabetes is a critical public health issues in the U.
 
 Hospital discharge data for diabetes-related admissions (PQI_01, PQI_03 and PQI_14) was obtained along with socio-demographic variables (e.g., Social Deprivation Index Score) from publicly available sources. Data was imported using the readr packages. Data cleaning, including removing duplicates and handling missing values, and ensuring correct data types was carried out. To conduct spatial analysis, the hospital PQI data was merged with socio-demographic data and shapefile of Erie County based on a common spatial identifier (ZIP Code). Hospital discharge data lacking geospatial coordinates, was addressed by using R packages for geocoding, for example R’s tmap package. Following geocoding and datasets merging, the structure of the various and merged datasets were checked for consistency. Spatial analysis was visualized using tmap and ggplot2 and sf for geographic mapping of diabetes-related PQIs. The spdep package was employed to perform Moran I’s analysis, measuring spatial autocorrelation and creating spatial weights. Hotspot analysis using the tmap package identified areas with statistically significant concentration of high or low diabetes-related PQIs. Regression models with lm and spatialreg packages were developed to socio-demographic factors influencing diabetes values. 
 
-BASIC FORMAT OF PROJECT 
-
-1. The first thing is the loading of necessary libraries 
-2. The second is the processing of my data 
-3. The third involves the integration of data sets 
-4. The fourth stage involves the visualization 
-5. Fifth stage deals with hotspot analysis and visualization 
-6. Last some customization and running of comparative statistics
-
-Here's my first code chunk.
 
 # Load necessary files and read
 ```{r}
-# Data wrangling
 library(dplyr)
 library(tidyr)
 library(stringr)
-
-# Spatial analysis and mapping
 library(sf)
 library(spdep)
 library(tmap)
 library(leaflet)
-
-# Plotting
 library(ggplot2)
 ```
 
@@ -618,5 +603,6 @@ Walker, R. J., Williams, J. S., Linde, S., & Egede, L. E. (2024). Social risk an
 Xia, P.-F., Pan, X.-F., Li, Y., Guo, K., Yang, K., Tu, Z.-Z., Zhang, Y.-B., Geng, T.-T., Liu, G., & Pan, A. (2021). Trends in diagnosed and undiagnosed diabetes among adults in the US, 2005–2016. Diabetes care, 44(9), e175-e177.
 
 Zhang, K., Liu, X., Xu, J., Yuan, J., Cai, W., Chen, T., Wang, K., Gao, Y., Nie, S., & Xu, X. (2021). Deeplearning models for the detection and incidence prediction of chronic kidney disease and type 2 diabetes from retinal fundus images. Nature biomedical engineering, 5(6), 533-545.
+
 
 
