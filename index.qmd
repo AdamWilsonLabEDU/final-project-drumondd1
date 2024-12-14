@@ -1,9 +1,9 @@
 
 ---
-title: "Spatial Analysis of Hospital Inpatient PQI for Undiagnosed Diabetes in Erie County" 
-author: "Drumond Dzakuma"
-subtitle: "Final_Project"
-date: "November 20, 2024"
+title: "Spatial Analysis of Hospital Inpatient PQI for Undiagnosed Diabetes" 
+author: Drumond Dzakuma
+subtitle: Final_Project
+date: November 20, 2024
 format:
   gfm:
     prefer-html: true
@@ -359,8 +359,8 @@ summary(lag_model_pqi_14_expected)
 ```
 
 
-# Visualization of LISA Results
-We can map the local Moran's I results to visualize clusters and outliers.
+# VISUALIZATION OF LISA RESULTS
+
 ```{r}
 # Map for Local Moran's I for PQI_14_Observed
 tm_shape(erie_merged_filtered) +
@@ -387,7 +387,7 @@ moran_ols <- moran.test(ols_residuals, lw, zero.policy = TRUE)
 print(moran_ols)
 ```
 
-
+# OLS Regression and Moran's I Test for Spatial Autocorrelation of Residuals (PQI_14_Expected ~ SDI_Overall)
 ```{r}
 # Fit OLS model for PQI_14_Expected
 ols_model_expected <- lm(PQI_14_Expected ~ SDI_Overall, data = erie_merged_filtered)
@@ -403,8 +403,7 @@ ols_residuals_expected <- residuals(ols_model_expected)
 moran_ols_expected <- moran.test(ols_residuals_expected, lw, zero.policy = TRUE)
 print(moran_ols_expected)
 ```
-
-
+# OLS Regression and Moran's I Test for Spatial Autocorrelation of Residuals
 ```{r}
 # Fit OLS model for PQI_14_Expected ~ SDI_Poverty
 ols_model_poverty <- lm(PQI_14_Expected ~ SDI_Poverty, data = erie_merged_filtered)
@@ -421,7 +420,7 @@ moran_ols_poverty <- moran.test(ols_residuals_poverty, lw, zero.policy = TRUE)
 print(moran_ols_poverty)
 ```
 
-
+# Leaflet Maps for PQI 14 Observed and Expected with Interactive Features
 ```{r}
 # Load necessary libraries
 library(dplyr)
@@ -491,7 +490,7 @@ map_observed
 map_expected
 ```
 
-
+# Interactive Visualization of PQI 03 and PQI 14 Observed and Expected
 ```{r}
 library(tmap)
 
@@ -531,7 +530,7 @@ tmap_save(map3, "PQI_14_Observed.html")
 tmap_save(map4, "PQI_14_Expected.html")
 ```
 
-
+# # Visualizing PQI 14 Observed and Expected
 ```{r}
 library(tmap)
 library(leaflet)
@@ -550,7 +549,7 @@ tm_shape(erie_merged_filtered) +
   tm_layout(main.title = "PQI 14 Expected in Erie County", legend.outside = TRUE)
 ```
 
-# Calculating the difference
+# Calculating the difference between Observed and Expected maps
 ```{r}
 # Set tmap to interactive mode
 tmap_mode("view")
@@ -567,8 +566,8 @@ tm_shape(erie_merged_filtered) +
   tm_layout(main.title = "Difference Between Observed and Expected PQI 14", 
             legend.outside = TRUE)
 ```
-
-Analysis conducted on the spatial distribution of Prevention Quality Indicators (PQI and the Social Deprivation Index (SDI), has provided insights into the spatial patterns and relationships between these variables in Erie County. The SDI scores were visualized using tmap, which provides a clear spatial representation of deprivation levels across the county. This has helped in identifying areas in the county with high or low levels of social deprivation, which may correlate with health outcomes. Spatial Autocorrelation (Moran’ I): Moran’ I test for spatial autocorrelation revealed whether there is statistically significant clustering of SDI values across the study area. Being statistically significant or not suggest areas with high or low deprivation tend to cluster, which could have implications for policy. 
+# Analysis
+ Analysis conducted on the spatial distribution of Prevention Quality Indicators (PQI and the Social Deprivation Index (SDI), has provided insights into the spatial patterns and relationships between these variables in Erie County. The SDI scores were visualized using tmap, which provides a clear spatial representation of deprivation levels across the county. This has helped in identifying areas in the county with high or low levels of social deprivation, which may correlate with health outcomes. Spatial Autocorrelation (Moran’s I): Moran’s I test for spatial autocorrelation revealed whether there is statistically significant clustering of SDI values across the study area. Being statistically significant or not suggest areas with high or low deprivation tend to cluster, which could have implications for policy. 
 
 
 # Results
